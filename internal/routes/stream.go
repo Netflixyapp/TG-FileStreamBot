@@ -27,7 +27,8 @@ func getStreamRoute(ctx *gin.Context) {
 	r := ctx.Request
 
 	messageIDParm := ctx.Param("messageID")
-	messageID, err := strconv.Atoi(messageIDParm)
+	//messageID, err := strconv.Atoi(messageIDParm)
+	messageID, err := strconv.Atoi(messageIDParm[:len(messageIDParm)-4])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
