@@ -9,6 +9,7 @@ import (
 	"EverythingSuckz/fsb/internal/utils"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -55,7 +56,8 @@ func runApp(cmd *cobra.Command, args []string) {
 	} else {
 		mainLogger.Info("Public IP", zap.String("ip", publicIp))
 	}
-	err = router.Run(fmt.Sprintf(":%d", config.ValueOf.Port))
+	//err = router.Run(fmt.Sprintf(":%d", config.ValueOf.Port))
+	err = http.ListenAndServeTLS(fmt.Sprintf(":%d", config.ValueOf.Port), "/etc/ssl/cloudflare.crt", "/etc/ssl/cloudflare.key", router)
 	if err != nil {
 		mainLogger.Sugar().Fatalln(err)
 	}
@@ -77,6 +79,53 @@ func getRouter(log *zap.Logger) *gin.Engine {
 			Version: versionString,
 		})
 	})
+	router.GET("/generate/:message_id", func(ctx *gin.Context) {
+		// Print the message to the console
+		log.Info("Incoming request")
+
+		// Extract the number from the URL parameters
+		message_id_str := ctx.Param("message_id")
+
+		// Call the getStreamLink function with the provided number
+		message_id, err := strconv.Atoi(message_id_str)
+
+		if err != nil {
+			ctx.String(http.StatusBadRequest, "Invalid number")
+			return
+		}
+
+		link := getStreamLink(ctx, log, message_id)
+
+		// Return the generated link to the client plaintext not JSON
+		ctx.String(http.StatusOK, link)
+	})
 	routes.Load(log, router)
 	return router
+}
+
+// A function that receives a number (message_id) and returns the stream link
+func getStreamLink(ctx *gin.Context, log *zap.Logger, message_id int) string {
+	// Get the file from the message using utils.FileFromMessage(ctx, worker.Client, messageID)
+	worker := bot.GetNextWorker()
+	file, err := utils.FileFromMessage(ctx, worker.Client, message_id)
+
+	// If there is an error, return the error
+	if err != nil {
+		log.Info(err.Error())
+		return err.Error()
+	}
+
+	fullHash := utils.PackFile(
+		file.FileName,
+		file.FileSize,
+		file.MimeType,
+		file.ID,
+	)
+
+	hash := utils.GetShortHash(fullHash)
+
+	//link := fmt.Sprintf("%s/stream/%d?hash=%s", config.ValueOf.Host, message_id, hash)
+	link := fmt.Sprintf("%s/stream/%d.mp4?hash=%s", config.ValueOf.Host, message_id, hash)
+
+	return link
 }
