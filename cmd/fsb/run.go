@@ -57,10 +57,32 @@ func runApp(cmd *cobra.Command, args []string) {
 		mainLogger.Info("Public IP", zap.String("ip", publicIp))
 	}
 	//err = router.Run(fmt.Sprintf(":%d", config.ValueOf.Port))
-	err = http.ListenAndServeTLS(fmt.Sprintf(":%d", config.ValueOf.Port), "/etc/ssl/cloudflare.crt", "/etc/ssl/cloudflare.key", router)
+	// Wrap the router with the CORS middleware
+	corsRouter := cors(router)
+	err = http.ListenAndServeTLS(fmt.Sprintf(":%d", config.ValueOf.Port), "/etc/ssl/cloudflare.crt", "/etc/ssl/cloudflare.key", corsRouter)
 	if err != nil {
 		mainLogger.Sugar().Fatalln(err)
 	}
+}
+
+// CORS middleware
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == "https://ufogrendizer.tv" || origin == "https://www.ufogrendizer.tv" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func getRouter(log *zap.Logger) *gin.Engine {
